@@ -79,7 +79,9 @@ def print_report(stats: dict) -> None:
     print("-" * 50)
     print(f"Cp:                    {stats['cp']:.3f}")
     print(f"Cpk:                   {stats['cpk']:.3f}")
-    print(f"  (upper side: {stats['cpk_upper']:.3f}, lower side: {stats['cpk_lower']:.3f})")
+    print(
+        f"  (upper side: {stats['cpk_upper']:.3f}, lower side: {stats['cpk_lower']:.3f})"
+    )
     print("-" * 50)
 
     if stats["cpk"] >= 1.33:
@@ -95,12 +97,25 @@ def print_report(stats: dict) -> None:
 def plot_control_chart(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(11, 6))
 
-    ax.plot(df["id"], df["diameter_mm"], marker="o", markersize=3,
-            linewidth=1, color="#2563eb", label="Diameter (mm)")
+    ax.plot(
+        df["id"],
+        df["diameter_mm"],
+        marker="o",
+        markersize=3,
+        linewidth=1,
+        color="#2563eb",
+        label="Diameter (mm)",
+    )
 
-    ax.axhline(stats["x_bar"], color="#16a34a", linestyle="-", linewidth=1.5, label="x̄ (mean)")
-    ax.axhline(stats["ucl"], color="#dc2626", linestyle="--", linewidth=1.2, label="UCL (x̄+3s)")
-    ax.axhline(stats["lcl"], color="#dc2626", linestyle="--", linewidth=1.2, label="LCL (x̄-3s)")
+    ax.axhline(
+        stats["x_bar"], color="#16a34a", linestyle="-", linewidth=1.5, label="x̄ (mean)"
+    )
+    ax.axhline(
+        stats["ucl"], color="#dc2626", linestyle="--", linewidth=1.2, label="UCL (x̄+3s)"
+    )
+    ax.axhline(
+        stats["lcl"], color="#dc2626", linestyle="--", linewidth=1.2, label="LCL (x̄-3s)"
+    )
     ax.axhline(USL, color="#7c3aed", linestyle=":", linewidth=1.2, label=f"USL ({USL})")
     ax.axhline(LSL, color="#7c3aed", linestyle=":", linewidth=1.2, label=f"LSL ({LSL})")
 
@@ -109,8 +124,14 @@ def plot_control_chart(df: pd.DataFrame, stats: dict, output_path: Path) -> None
         (df["diameter_mm"] > stats["ucl"]) | (df["diameter_mm"] < stats["lcl"])
     ]
     if not out_of_control.empty:
-        ax.scatter(out_of_control["id"], out_of_control["diameter_mm"],
-                   color="red", s=60, zorder=5, label="Out of control")
+        ax.scatter(
+            out_of_control["id"],
+            out_of_control["diameter_mm"],
+            color="red",
+            s=60,
+            zorder=5,
+            label="Out of control",
+        )
 
     ax.set_xlabel("Sample #")
     ax.set_ylabel("Diameter (mm)")
@@ -124,7 +145,9 @@ def plot_control_chart(df: pd.DataFrame, stats: dict, output_path: Path) -> None
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SPC analysis on logged CNC measurements.")
+    parser = argparse.ArgumentParser(
+        description="SPC analysis on logged CNC measurements."
+    )
     parser.add_argument("--db", type=Path, default=DB_PATH)
     parser.add_argument("--output", type=Path, default=OUTPUT_CHART)
     parser.add_argument("--usl", type=float, default=USL)

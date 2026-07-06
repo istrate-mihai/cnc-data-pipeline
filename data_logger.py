@@ -54,7 +54,9 @@ def insert_measurement(conn: sqlite3.Connection, diameter_mm: float, flag: int) 
     conn.commit()
 
 
-async def poll_loop(client: AsyncModbusTcpClient, conn: sqlite3.Connection, max_reads: int | None) -> None:
+async def poll_loop(
+    client: AsyncModbusTcpClient, conn: sqlite3.Connection, max_reads: int | None
+) -> None:
     reads = 0
     while max_reads is None or reads < max_reads:
         result = await client.read_holding_registers(address=0, count=2, slave=0)
@@ -71,7 +73,9 @@ async def poll_loop(client: AsyncModbusTcpClient, conn: sqlite3.Connection, max_
         reads += 1
 
         if reads % 10 == 0:
-            log.info("logged %d readings | last=%.3fmm flag=%d", reads, diameter_mm, flag)
+            log.info(
+                "logged %d readings | last=%.3fmm flag=%d", reads, diameter_mm, flag
+            )
 
         await asyncio.sleep(POLL_INTERVAL_S)
 
@@ -84,7 +88,11 @@ async def main(max_reads: int | None) -> None:
     await client.connect()
 
     if not client.connected:
-        log.error("Could not connect to Modbus server at %s:%d. Is modbus_server.py running?", HOST, PORT)
+        log.error(
+            "Could not connect to Modbus server at %s:%d. Is modbus_server.py running?",
+            HOST,
+            PORT,
+        )
         return
 
     log.info("Connected to Modbus server. Logging every %.1fs...", POLL_INTERVAL_S)
@@ -98,7 +106,9 @@ async def main(max_reads: int | None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Poll simulated CNC Modbus server and log to SQLite.")
+    parser = argparse.ArgumentParser(
+        description="Poll simulated CNC Modbus server and log to SQLite."
+    )
     parser.add_argument(
         "--max-reads",
         type=int,

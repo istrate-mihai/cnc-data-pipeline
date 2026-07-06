@@ -1,3 +1,6 @@
 pymodbus==3.6.9
+asyncua
 pandas
 matplotlib
+fastapi
+uvicorn[standard]

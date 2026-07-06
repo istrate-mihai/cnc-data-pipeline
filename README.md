@@ -2,6 +2,8 @@
 
 Simulates the full data flow a real CNC/Modbus-connected machine would produce, matching the "colectare de date din producție" + "dashboard-uri SPC" requirements from the Schaeffler Programator Aplicații Industriale JD.
 
+![Live SPC Dashboard](./images/spc_dashboard.png)
+
 ```
 modbus_server.py   --Modbus TCP-->  data_logger.py  --writes-->  SQLite  <--reads--  api.py (FastAPI dashboard)
 opcua_server.py     --OPC UA-->     (alt. client, same DB)                <--reads--  spc_analysis.py (CLI report + PNG chart)

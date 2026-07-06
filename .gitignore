@@ -1,0 +1,28 @@
+# .gitignore
+
+## Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.Python
+venv/
+.venv/
+
+## Project runtime data (generated at run/deploy time, not source)
+cnc_measurements.db
+control_chart.png
+*.log
+
+## Environment
+.env
+.env.local
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Editor
+.vscode/
+.idea/
+*.swp

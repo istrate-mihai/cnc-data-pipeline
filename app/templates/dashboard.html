@@ -1,114 +1,309 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CNC Data Pipeline Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, sans-serif; margin: 1rem; background: #0f172a; color: #e2e8f0; }
-  h1 { font-size: 1.3rem; margin-bottom: 0.25rem; }
-  .subtitle { color: #94a3b8; margin-bottom: 1.5rem; font-size: 0.85rem; }
-  
-  /* Mobile-first CSS Grid for stats */
-  .stats { 
-    display: grid; 
-    grid-template-columns: repeat(2, 1fr); 
-    gap: 0.75rem; 
-    margin-bottom: 1.5rem; 
-  }
-  .card { background: #1e293b; border-radius: 8px; padding: 0.85rem 1rem; min-width: 0; }
-  .card .label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
-  .card .value { font-size: 1.3rem; font-weight: 600; margin-top: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  
-  .verdict-capable { color: #4ade80; }
-  .verdict-marginal { color: #facc15; }
-  .verdict-notcapable { color: #f87171; }
-  
-  /* Chart Container to handle aspect ratios cleanly */
-  .chart-container { position: relative; width: 100%; height: 260px; background: #1e293b; border-radius: 8px; padding: 0.5rem; }
-  canvas { width: 100% !important; height: 100% !important; }
-
-  /* Desktop layout upgrades */
-  @media (min-width: 640px) {
-    body { margin: 2rem; }
-    h1 { font-size: 1.6rem; }
-    .subtitle { font-size: 0.9rem; }
-    .stats { grid-template-columns: repeat(5, 1fr); gap: 1rem; }
-    .card { padding: 1rem 1.5rem; }
-    .card .value { font-size: 1.6rem; }
-    .chart-container { height: 350px; padding: 1rem; }
-  }
-</style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schaeffler CNC SPC Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+        /* Header – Schaeffler green */
+        .header {
+            background: #006747;
+            color: #ffffff;
+            padding: 20px 30px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-weight: 300;
+            letter-spacing: 1px;
+            font-size: 28px;
+        }
+        .header .sub {
+            font-size: 14px;
+            opacity: 0.85;
+        }
+        .header .live-badge {
+            background: rgba(255,255,255,0.15);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        /* Stats cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 18px 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            border-left: 5px solid #006747;
+        }
+        .stat-card .label {
+            font-size: 13px;
+            color: #6c757d;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 600;
+            color: #006747;
+            margin-top: 6px;
+        }
+        .stat-card .detail {
+            font-size: 13px;
+            color: #495057;
+            margin-top: 4px;
+        }
+        .stat-card.fmea {
+            border-left-color: #e67e22;  /* orange accent for FMEA */
+        }
+        /* Chart */
+        .chart-wrapper {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            margin: 20px 0;
+        }
+        .chart-wrapper .chart-title {
+            font-size: 16px;
+            font-weight: 500;
+            color: #006747;
+            margin-bottom: 10px;
+        }
+        .chart-container {
+            height: 400px;
+        }
+        .fmea-detail {
+            background: #f8f9fa;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border-left: 4px solid #e67e22;
+            margin: 10px 0 20px;
+            font-size: 14px;
+            color: #343a40;
+        }
+        .fmea-detail strong {
+            color: #006747;
+        }
+        .update-time {
+            color: #6c757d;
+            font-size: 13px;
+            text-align: right;
+            margin-top: 10px;
+        }
+        @media (max-width: 600px) {
+            .header { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .stat-card .value { font-size: 22px; }
+        }
+    </style>
 </head>
 <body>
-  <h1>CNC Data Pipeline &mdash; Live SPC Dashboard</h1>
-  <div class="subtitle">Simulated part diameter measurements, polled every 2s</div>
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <div>
+            <h1>🔧 Schaeffler CNC SPC</h1>
+            <div class="sub">Live process monitoring – diameter measurements</div>
+        </div>
+        <div class="live-badge">● Live</div>
+    </div>
 
-  <div class="stats" id="stats"></div>
-  <div class="chart-container">
-    <canvas id="chart"></canvas>
-  </div>
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Process Capability (Cp)</div>
+            <div class="value" id="cp">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Process Capability (Cpk)</div>
+            <div class="value" id="cpk">—</div>
+        </div>
+        <div class="stat-card fmea">
+            <div class="label">FMEA RPN</div>
+            <div class="value" id="rpn">—</div>
+            <div class="detail" id="fmea-components">Severity · Occurrence · Detection</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Last Reading</div>
+            <div class="value" id="last-diameter">—</div>
+            <div class="detail" id="last-status">—</div>
+        </div>
+    </div>
 
-  <script>
+    <!-- Chart -->
+    <div class="chart-wrapper">
+        <div class="chart-title">📊 Diameter over time</div>
+        <div class="chart-container">
+            <canvas id="chart"></canvas>
+        </div>
+        <div class="update-time">Last updated: <span id="last-update">—</span></div>
+    </div>
+
+    <!-- FMEA details -->
+    <div class="fmea-detail" id="fmea-detail-box">
+        <strong>FMEA breakdown</strong> – Severity: <span id="sev">—</span> ·
+        Occurrence: <span id="occ">—</span> ·
+        Detection: <span id="det">—</span>
+    </div>
+</div>
+
+<script>
     const ctx = document.getElementById('chart').getContext('2d');
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'Diameter (mm)',
-          data: [],
-          borderColor: '#60a5fa',
-          backgroundColor: 'rgba(96,165,250,0.1)',
-          tension: 0.2,
-          pointRadius: 1.5,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#334155' } },
-          y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#334155' } }
-        },
-        plugins: { 
-          legend: { labels: { color: '#e2e8f0', font: { size: 11 } } } 
-        }
-      }
-    });
+    let chart;
 
-    async function refresh() {
-      try {
-        const [meas, stats] = await Promise.all([
-          fetch('/api/measurements?limit=60').then(r => r.json()),
-          fetch('/api/stats').then(r => r.json()),
-        ]);
+    const SPEC_LOWER = 9.8;
+    const SPEC_UPPER = 10.2;
+    const TARGET = 10.0;
 
-        chart.data.labels = meas.map(m => m.id);
-        chart.data.datasets[0].data = meas.map(m => m.diameter_mm);
-        chart.update();
+    function fetchData() {
+        fetch('/api/measurements?limit=60')
+            .then(res => res.json())
+            .then(data => {
+                if (!data || data.length === 0) {
+                    document.getElementById('last-update').textContent = 'No data yet';
+                    return;
+                }
+                data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString());
+                const diameters = data.map(d => d.diameter);
+                const pointColors = data.map(d => d.out_of_control ? '#dc3545' : '#006747');
 
-        if (!stats.error) {
-          const verdictClass = stats.cpk >= 1.33 ? 'verdict-capable'
-                              : stats.cpk >= 1.0 ? 'verdict-marginal'
-                              : 'verdict-notcapable';
-          document.getElementById('stats').innerHTML = `
-            <div class="card"><div class="label">Samples</div><div class="value">${stats.n}</div></div>
-            <div class="card"><div class="label">Mean</div><div class="value">${stats.x_bar.toFixed(4)}</div></div>
-            <div class="card"><div class="label">Std Dev</div><div class="value">${stats.s.toFixed(4)}</div></div>
-            <div class="card"><div class="label">Cp</div><div class="value">${stats.cp.toFixed(2)}</div></div>
-            <div class="card"><div class="label">Cpk</div><div class="value ${verdictClass}">${stats.cpk.toFixed(2)}</div></div>
-          `;
-        }
-      } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-      }
+                const last = data[data.length-1];
+                document.getElementById('last-diameter').textContent = last.diameter.toFixed(4);
+                document.getElementById('last-status').textContent = last.out_of_control ? '⚠️ Out of control' : '✅ In control';
+                document.getElementById('last-status').style.color = last.out_of_control ? '#dc3545' : '#28a745';
+
+                if (chart) {
+                    chart.data.labels = labels;
+                    chart.data.datasets[0].data = diameters;
+                    chart.data.datasets[0].pointBackgroundColor = pointColors;
+                    chart.update();
+                } else {
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Diameter (mm)',
+                                data: diameters,
+                                borderColor: '#006747',
+                                backgroundColor: '#006747',
+                                pointBackgroundColor: pointColors,
+                                fill: false,
+                                tension: 0.15,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: true, labels: { color: '#006747' } },
+                                tooltip: { callbacks: { label: (ctx) => `Diameter: ${ctx.parsed.y.toFixed(4)} mm` } }
+                            },
+                            scales: {
+                                y: {
+                                    min: 9.5, max: 10.5,
+                                    grid: { color: '#e9ecef' },
+                                    title: { display: true, text: 'Diameter (mm)', color: '#006747' }
+                                },
+                                x: { grid: { display: false }, title: { display: true, text: 'Time', color: '#006747' } }
+                            }
+                        }
+                    });
+                    // Add spec lines
+                    const plugin = {
+                        id: 'specLines',
+                        afterDraw(chart) {
+                            const yScale = chart.scales.y;
+                            const yLower = yScale.getPixelForValue(SPEC_LOWER);
+                            const yUpper = yScale.getPixelForValue(SPEC_UPPER);
+                            const yTarget = yScale.getPixelForValue(TARGET);
+                            const ctx2 = chart.ctx;
+                            const x1 = chart.chartArea.left;
+                            const x2 = chart.chartArea.right;
+                            ctx2.save();
+                            ctx2.beginPath();
+                            ctx2.moveTo(x1, yLower);
+                            ctx2.lineTo(x2, yLower);
+                            ctx2.strokeStyle = '#e67e22';
+                            ctx2.lineWidth = 2;
+                            ctx2.setLineDash([6, 4]);
+                            ctx2.stroke();
+                            ctx2.beginPath();
+                            ctx2.moveTo(x1, yUpper);
+                            ctx2.lineTo(x2, yUpper);
+                            ctx2.strokeStyle = '#e67e22';
+                            ctx2.lineWidth = 2;
+                            ctx2.setLineDash([6, 4]);
+                            ctx2.stroke();
+                            ctx2.beginPath();
+                            ctx2.moveTo(x1, yTarget);
+                            ctx2.lineTo(x2, yTarget);
+                            ctx2.strokeStyle = '#28a745';
+                            ctx2.lineWidth = 1.5;
+                            ctx2.setLineDash([]);
+                            ctx2.stroke();
+                            ctx2.restore();
+                        }
+                    };
+                    chart.register(plugin);
+                }
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+            })
+            .catch(err => console.error('Fetch error:', err));
     }
 
-    refresh();
-    setInterval(refresh, 2000);
-  </script>
+    function fetchStats() {
+        fetch('/api/stats')
+            .then(res => res.json())
+            .then(data => {
+                if (data.cp !== undefined) document.getElementById('cp').textContent = data.cp ?? '—';
+                if (data.cpk !== undefined) document.getElementById('cpk').textContent = data.cpk ?? '—';
+            })
+            .catch(() => {});
+
+        fetch('/api/fmea')
+            .then(res => res.json())
+            .then(data => {
+                if (data.rpn !== undefined) {
+                    document.getElementById('rpn').textContent = data.rpn;
+                    document.getElementById('sev').textContent = data.severity;
+                    document.getElementById('occ').textContent = data.occurrence;
+                    document.getElementById('det').textContent = data.detection;
+                }
+            })
+            .catch(() => {});
+    }
+
+    fetchData();
+    fetchStats();
+    setInterval(() => { fetchData(); fetchStats(); }, 2000);
+</script>
 </body>
 </html>

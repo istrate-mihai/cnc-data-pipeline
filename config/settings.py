@@ -1,37 +1,59 @@
 """
-config/settings.py
-
-Constante partajate între toate modulele proiectului.
-Toate căile și parametrii de simulare sunt centralizați aici.
+Central configuration – constants, database paths, limits, and DB connection helpers.
 """
 
-from pathlib import Path
+import os
+import sqlite3
+import psycopg2
+from urllib.parse import urlparse
 
-# Calea absolută a rădăcinii proiectului (cnc-data-pipeline/)
-BASE_DIR = Path(__file__).parent.parent
+# ----- CNC specifications -----
+TARGET = 10.0  # mm
+SPEC_LOWER = 9.8
+SPEC_UPPER = 10.2
 
-# Către baza de date SQLite
-DB_DIR = BASE_DIR / "db"
-DB_PATH = DB_DIR / "cnc_measurements.db"
+# ----- Paths -----
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "db", "measurements.db")
 
-# Limitele de specificație (mm)
-USL = 10.10
-LSL = 9.90
+# ----- Database URL (optional PostgreSQL) -----
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-# Parametrii procesului (simulare)
-TARGET_MM = 10.006
-NOISE_STD_MM = 0.021
-DRIFT_PER_TICK_MM = 0.0004
 
-# Intervale (secunde)
-UPDATE_INTERVAL_S = 1.0
-POLL_INTERVAL_S = 1.0
+def get_db_connection():
+    """Return a database connection (SQLite or PostgreSQL)."""
+    if DATABASE_URL:
+        # PostgreSQL
+        return psycopg2.connect(
+            DATABASE_URL, sslmode="require" if "render" in DATABASE_URL else "disable"
+        )
+    else:
+        # SQLite
+        return sqlite3.connect(DB_PATH)
 
-# Modbus/OPC UA
-MODBUS_HOST = "127.0.0.1"
-MODBUS_PORT = 5020
-OPCUA_ENDPOINT = "opc.tcp://0.0.0.0:4840/cnc/server/"
-OPCUA_NAMESPACE = "http://schaeffler-demo.local/cnc-pipeline"
 
-# Seed
-SEED_COUNT = 40
+def get_db_placeholder():
+    """Return the correct placeholder for parameterised queries."""
+    return "%s" if DATABASE_URL else "?"
+
+
+def get_create_table_sql():
+    """Return the CREATE TABLE statement for the current DB engine."""
+    if DATABASE_URL:
+        return """
+        CREATE TABLE IF NOT EXISTS measurements (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            diameter REAL NOT NULL,
+            out_of_control INTEGER DEFAULT 0
+        )
+        """
+    else:
+        return """
+        CREATE TABLE IF NOT EXISTS measurements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            diameter REAL NOT NULL,
+            out_of_control INTEGER DEFAULT 0
+        )
+        """

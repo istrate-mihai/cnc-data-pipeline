@@ -1,134 +1,152 @@
 # CNC Data Pipeline
 
-Simulates the full data flow a real CNC/Modbus-connected machine would produce, matching the "colectare de date din producție" + "dashboard-uri SPC" requirements from the Schaeffler Programator Aplicații Industriale JD.
+A complete data pipeline that simulates a CNC machine producing diameter measurements, exposes them via Modbus TCP and OPC UA, logs them to a database (SQLite or PostgreSQL), and serves a live SPC dashboard with FastAPI + Chart.js.
 
-![Live SPC Dashboard](./images/spc_dashboard.png)
+---
 
+## Features
+
+* **Simulated Modbus server** (port 5020) generating diameter + out‑of‑control flag every second.
+* **OPC UA server** (port 4840) exposing the same data as typed nodes.
+* **Data logger** polls Modbus and writes to the database.
+* **FastAPI dashboard** with live chart, `/api/measurements`, `/api/stats` (Cp/Cpk), and `/api/fmea` (RPN).
+* **Background simulator** keeps data flowing even when Modbus is off.
+* **FMEA RPN calculator** – CLI script and API endpoint.
+* **PostgreSQL support** via `DATABASE_URL` environment variable.
+* **Alerting** – sends Slack or email notifications when an out‑of‑control measurement occurs.
+
+---
+
+## Setup
+
+1. **Clone the repository** and navigate into the project root.
+2. **Create and activate a virtual environment:**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Git Bash / Linux
+   # or: venv\Scripts\activate on Windows
+   ```
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+## Running the Pipeline
+
+### Local (SQLite Default)
+
+Always ensure you run these commands from the project root directory.
+
+1. **Start the Modbus server** (in a separate terminal):
+   ```bash
+   python -m data_ingestion.modbus_server
+   ```
+2. **Start the OPC UA server** (optional, separate terminal):
+   ```bash
+   python -m data_ingestion.opcua_server
+   ```
+3. **Start the data logger** (in a separate terminal):
+   ```bash
+   python -m data_ingestion.data_logger
+   ```
+4. **Start the FastAPI dashboard** (in another terminal):
+   ```bash
+   uvicorn app.api:app --reload
+   ```
+5. Open [http://localhost:8000](http://localhost:8000) in your browser.
+
+### Using PostgreSQL
+
+1. **Start PostgreSQL via Docker Compose:**
+   ```bash
+   docker-compose up -d
+   ```
+2. **Set the environment variable:**
+   ```bash
+   export DATABASE_URL=postgresql://cnc:cncpass@localhost:5432/cnc_db
+   ```
+3. Run the pipeline components as described in the SQLite steps above. The logger and API will automatically detect the environment variable and switch to PostgreSQL.
+
+### Seed Initial Data (Optional)
+
+To populate the database with demonstration data before running the logger:
+```bash
+python -m data_ingestion.seed_demo_data
 ```
-modbus_server.py --Modbus TCP--> data_logger.py --writes--> SQLite <--reads-- api.py (FastAPI dashboard)
-opcua_server.py  --OPC UA----> (alt. client, same DB) <--reads-- spc_analysis.py (CLI report + PNG chart)
+
+---
+
+## FMEA RPN Calculator (CLI)
+
+To calculate Risk Priority Numbers via the command-line utility:
+```bash
+python -m app.fmea_rpn
 ```
+*Note: Alternatively, you can query this dynamically via the API endpoint at `GET /api/fmea`.*
+
+---
+
+## Alerting Configuration
+
+To enable automated alerts when measurements cross control limits, set the relevant environment variables before starting the data logger:
+
+### Slack Integration
+```bash
+export SLACK_WEBHOOK_URL=[https://hooks.slack.com/services/](https://hooks.slack.com/services/)...
+```
+
+### Email Integration (SMTP)
+```bash
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USER=your_email@gmail.com
+export SMTP_PASSWORD=your_app_password
+export ALERT_RECIPIENT=recipient@example.com
+```
+
+---
+
+## Deployment on Render
+
+1. Push your repository to GitHub.
+2. Create a new **Web Service** on Render pointing to your repository.
+3. Add the `DATABASE_URL` environment variable if connecting to Render's managed PostgreSQL instance.
+4. The included `render.yaml` and `Dockerfile` will automatically handle the multi-component build sequence.
 
 ---
 
 ## Project Structure
 
 ```text
-cnc-data-pipeline/
-├── app/                       # Dashboard & SPC logic
-│   ├── api.py                 # FastAPI endpoints
-│   ├── spc_analysis.py        # Cp/Cpk + control chart generator
+.
+├── app/
+│   ├── api.py                 # FastAPI app & endpoints
+│   ├── fmea_rpn.py            # RPN calculator (CLI + endpoint)
+│   ├── alerting.py            # Slack and email alert logic
 │   └── templates/
-│       └── dashboard.html     # Live UI
-├── data_ingestion/            # Simulated sources + logger
-│   ├── modbus_server.py       # Modbus TCP simulator
-│   ├── opcua_server.py        # OPC UA simulator
-│   ├── data_logger.py         # Modbus -> SQLite gateway
-│   └── seed_demo_data.py      # Initial data populator
+│       └── dashboard.html     # Live UI elements (Chart.js)
+├── data_ingestion/
+│   ├── modbus_server.py       # Simulates industrial Modbus TCP data map
+│   ├── opcua_server.py        # Simulates industrial OPC UA node structure
+│   ├── data_logger.py         # Polls Modbus, commits to DB, triggers alerts
+│   └── seed_demo_data.py      # Populates database with evaluation data
 ├── config/
-│   └── settings.py            # Centralized constants (limits, paths, etc.)
-├── db/                        # SQLite database (auto-created)
-├── requirements.txt
-├── Dockerfile
-└── render.yaml
+│   └── settings.py            # Central config, thresholds, and database helpers
+├── db/                        # SQLite storage destination (auto‑created)
+├── docker-compose.yml         # Local PostgreSQL container configuration
+├── requirements.txt           # Application dependencies
+├── Dockerfile                 # Multi-stage container assembly blueprint
+└── render.yaml                # Infrastructure-as-code orchestration manifest
 ```
 
 ---
 
-## Why This Architecture
+## SPC Analysis
 
-* **Two protocols (Modbus + OPC UA)** simulated in parallel, on purpose: the JD explicitly lists both as "avantaj". Same underlying signal, different wire format — demonstrates the actual integration tradeoff at interview.
-* **SQLite** instead of Postgres/MySQL: zero external dependencies, portable. In production this slot is exactly where a MES database would sit.
-* **Cp/Cpk formulas implemented from scratch** (not a library call) — every number in the report is explainable line by line.
-* **FastAPI dashboard** with a background simulator: makes the deployed instance genuinely live (new data every 2s) without needing a separate always-on Modbus process on a free hosting tier.
-* **Modular structure**: `app/`, `data_ingestion/`, `config/` separate concerns, easy to extend with new protocols (MQTT, etc.).
-
----
-
-## Setup
-
+Run the standalone Statistical Process Control report generator to run off-line calculations:
 ```bash
-# Clone the repo and enter the directory
-cd cnc_data_pipeline
-
-# Create and activate a virtual environment (recommended)
-python -m venv venv
-source venv/Scripts/activate     # Git Bash / Linux
-# or: venv\Scripts\activate      # Windows CMD
-
-# Install dependencies
-pip install -r requirements.txt
+python -m app.spc_analysis
 ```
-
-> ⚠️ **Note:** Pinned to `pymodbus==3.6.9` deliberately. `pymodbus 3.13+` deprecated the `context[slave].setValues(...)` API in favor of a `SimData/SimDevice` rewrite — 3.6.9 matches almost all tutorials/docs and is stable for this scope.
-
----
-
-## Running Locally
-
-### Full Pipeline (Requires 3 terminals)
-All commands must be run from the project root (`cnc_data_pipeline/`) with the virtual environment activated.
-
-| Terminal | Command | Description |
-| :--- | :--- | :--- |
-| **1** | `python data_ingestion/modbus_server.py` | Simulated CNC machine (Modbus TCP) |
-| **2** | `python data_ingestion/data_logger.py` | Reads Modbus, writes to SQLite |
-| **3** | `uvicorn app.api:app --reload --port 8000` | Live dashboard (http://localhost:8000) |
-
-* Terminals 1 & 2 run forever – press `Ctrl+C` to stop.
-* Terminal 3 can be stopped with `Ctrl+C` as well.
-* *Optional:* Use `--max-reads 30` with `data_logger.py` to stop after N readings.
-
-### OPC UA Variant
-```bash
-python data_ingestion/opcua_server.py
-```
-Exposes the same simulated signal as a typed OPC UA object (`CNC_Machine_1.Diameter_mm`, `CNC_Machine_1.OutOfControlFlag`) at `opc.tcp://127.0.0.1:4840/cnc/server/`, instead of raw Modbus registers. 
-
-Browse it with any OPC UA client (e.g., UAExpert) or asyncua's own `Client` class to see the difference in practice: named/typed nodes vs. flat register addresses.
-
-### Seed Initial Data (Optional)
-If you want to populate the database with 40 simulated measurements before starting the logger:
-```bash
-python data_ingestion/seed_demo_data.py
-```
-*Note: This is also automatically executed during the Docker build (used on Render).*
-
-### Offline SPC Analysis
-After collecting enough data (e.g., 100+ readings), generate a console report and a control chart PNG:
-```bash
-python app/spc_analysis.py
-```
-The chart is saved as `images/control_chart.png`.
-
----
-
-## Protocol & Data Mapping
-
-### Register Map (`modbus_server.py`)
-| Address | Meaning | Encoding |
-| :--- | :--- | :--- |
-| **0** | Part diameter | micrometers, int (10006 = 10.006mm) |
-| **1** | Out-of-control flag | 0 = normal, 1 = beyond 3σ from drift |
-
-### OPC UA Node Map (`opcua_server.py`)
-| Node | Type | Meaning |
-| :--- | :--- | :--- |
-| `CNC_Machine_1.Diameter_mm` | Double | Part diameter, mm (no scaling needed — floats are native) |
-| `CNC_Machine_1.OutOfControlFlag` | Int16 | 0 = normal, 1 = beyond 3σ from drift |
-
----
-
-## Simulated Process Behavior
-
-* **Target:** 10.006mm (matches the hand-calculated example from theory prep)
-* **Noise:** Gaussian, σ ≈ 0.021mm
-* **Drift:** Slow linear drift simulates tool wear — Cp stays roughly stable, Cpk degrades over time as the mean walks away from center. This serves as a concrete example of *"Cp good, Cpk bad"* to reference during the interview.
-
----
-
-## Troubleshooting
-
-* **`ModuleNotFoundError: No module named 'config'`** when running scripts from `data_ingestion/` or `app/`: This is fixed. All scripts now add the project root to `sys.path` automatically.
-* **`No module named 'pymodbus'`**: Ensure your virtual environment is activated and dependencies are installed (`pip install -r requirements.txt`).
-* **Port conflicts**: Change the port in `app.api` or in the `modbus_server.py`/`data_logger.py` settings (adjust `config/settings.py`).
+This utility outputs a detailed calculation log to the console and generates a statistical chart saved locally as `control_chart.png`.

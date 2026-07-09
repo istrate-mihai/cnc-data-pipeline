@@ -1,7 +1,7 @@
-pymodbus==3.6.9
-asyncua
-pandas
-matplotlib
 fastapi
-uvicorn[standard]
-matplotlib
+uvicorn
+jinja2
+pymodbus
+asyncua
+psycopg2-binary
+requests

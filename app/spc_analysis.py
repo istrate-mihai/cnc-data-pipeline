@@ -1,155 +1,143 @@
 """
-app/spc_analysis.py
-
-Calculates Cp, Cpk and generates control chart.
+SPC Analysis Tool – generates a console report and control chart from stored measurements.
 """
 
-import argparse
-import sqlite3
 import sys
-from pathlib import Path
+import os
 
-# Add project root to sys.path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import matplotlib.pyplot as plt
+import sqlite3
 import pandas as pd
+import matplotlib
 
-from config.settings import DB_PATH, USL, LSL
+matplotlib.use("Agg")  # Use non-interactive backend for server-side generation
+import matplotlib.pyplot as plt
+import numpy as np
+import argparse
+import base64
+from io import BytesIO
+from datetime import datetime
+from config.settings import DB_PATH, SPEC_UPPER, SPEC_LOWER, TARGET, get_db_connection
 
-OUTPUT_CHART = Path(__file__).parent.parent / "images" / "control_chart.png"
 
-
-def load_measurements(db_path: Path) -> pd.DataFrame:
-    conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query(
-        "SELECT id, timestamp, diameter_mm, out_of_control FROM measurements ORDER BY id",
-        conn,
-    )
-    conn.close()
-    if df.empty:
-        raise ValueError(
-            f"No measurements found in {db_path}. Run data_logger.py first."
+def load_measurements():
+    """Load all measurements using the configured database connection."""
+    conn = get_db_connection()
+    try:
+        df = pd.read_sql_query(
+            "SELECT id, timestamp, diameter, out_of_control FROM measurements ORDER BY id",
+            conn,
         )
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        df = pd.DataFrame()
+    conn.close()
     return df
 
 
-def calculate_capability(df: pd.DataFrame, usl: float, lsl: float) -> dict:
-    x_bar = df["diameter_mm"].mean()
-    s = df["diameter_mm"].std(ddof=1)
-
-    cp = (usl - lsl) / (6 * s)
-    cpk_upper = (usl - x_bar) / (3 * s)
-    cpk_lower = (x_bar - lsl) / (3 * s)
-    cpk = min(cpk_upper, cpk_lower)
+def calculate_spc_stats(df):
+    """Calculate basic SPC statistics."""
+    if df.empty:
+        return None
+    diameters = df["diameter"]
+    n = len(diameters)
+    mean = diameters.mean()
+    std = diameters.std(ddof=1)
+    cp = (SPEC_UPPER - SPEC_LOWER) / (6 * std) if std > 0 else None
+    cpu = (SPEC_UPPER - mean) / (3 * std) if std > 0 else None
+    cpl = (mean - SPEC_LOWER) / (3 * std) if std > 0 else None
+    cpk = min(cpu, cpl) if cpu is not None and cpl is not None else None
+    ooc_count = df["out_of_control"].sum()
+    ooc_pct = 100 * ooc_count / n
 
     return {
-        "n": len(df),
-        "x_bar": x_bar,
-        "s": s,
+        "n": n,
+        "mean": mean,
+        "std": std,
         "cp": cp,
         "cpk": cpk,
-        "cpk_upper": cpk_upper,
-        "cpk_lower": cpk_lower,
-        "ucl": x_bar + 3 * s,
-        "lcl": x_bar - 3 * s,
+        "ooc_count": ooc_count,
+        "ooc_pct": ooc_pct,
     }
 
 
-def print_report(stats: dict) -> None:
-    print("=" * 50)
-    print("SPC / Process Capability Report")
-    print("=" * 50)
-    print(f"Sample size (n):       {stats['n']}")
-    print(f"Mean (x_bar):          {stats['x_bar']:.4f} mm")
-    print(f"Std dev (s, n-1):      {stats['s']:.4f} mm")
-    print(f"UCL (x_bar + 3s):      {stats['ucl']:.4f} mm")
-    print(f"LCL (x_bar - 3s):      {stats['lcl']:.4f} mm")
-    print(f"Spec limits:           LSL={LSL} / USL={USL} mm")
-    print("-" * 50)
-    print(f"Cp:                    {stats['cp']:.3f}")
-    print(f"Cpk:                   {stats['cpk']:.3f}")
-    print(
-        f"  (upper side: {stats['cpk_upper']:.3f}, lower side: {stats['cpk_lower']:.3f})"
-    )
-    print("-" * 50)
+def generate_control_chart_figure(df):
+    """Create a matplotlib figure of the control chart."""
+    if df.empty:
+        return None
+    diameters = df["diameter"]
+    mean = diameters.mean()
+    std = diameters.std(ddof=1)
+    ucl = mean + 3 * std
+    lcl = mean - 3 * std
 
-    if stats["cpk"] >= 1.33:
-        verdict = "CAPABLE (meets typical automotive Cpk >= 1.33 threshold)"
-    elif stats["cpk"] >= 1.0:
-        verdict = "MARGINAL (Cpk between 1.0-1.33, process needs attention)"
-    else:
-        verdict = "NOT CAPABLE (Cpk < 1.0, process will produce non-conforming parts)"
-    print(f"Verdict: {verdict}")
-    print("=" * 50)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(df.index, diameters, "b-", label="Diameter", linewidth=1)
+    ax.axhline(y=mean, color="g", linestyle="--", label=f"Mean = {mean:.3f}")
+    ax.axhline(y=ucl, color="r", linestyle="--", label=f"UCL = {ucl:.3f}")
+    ax.axhline(y=lcl, color="r", linestyle="--", label=f"LCL = {lcl:.3f}")
+    ax.axhline(y=SPEC_UPPER, color="orange", linestyle=":", label=f"USL = {SPEC_UPPER}")
+    ax.axhline(y=SPEC_LOWER, color="orange", linestyle=":", label=f"LSL = {SPEC_LOWER}")
+    ax.axhline(y=TARGET, color="gray", linestyle="-.", label=f"Target = {TARGET}")
 
-
-def plot_control_chart(df: pd.DataFrame, stats: dict, output_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(11, 6))
-
-    ax.plot(
-        df["id"],
-        df["diameter_mm"],
-        marker="o",
-        markersize=3,
-        linewidth=1,
-        color="#2563eb",
-        label="Diameter (mm)",
-    )
-
-    ax.axhline(
-        stats["x_bar"], color="#16a34a", linestyle="-", linewidth=1.5, label="x̄ (mean)"
-    )
-    ax.axhline(
-        stats["ucl"], color="#dc2626", linestyle="--", linewidth=1.2, label="UCL (x̄+3s)"
-    )
-    ax.axhline(
-        stats["lcl"], color="#dc2626", linestyle="--", linewidth=1.2, label="LCL (x̄-3s)"
-    )
-    ax.axhline(USL, color="#7c3aed", linestyle=":", linewidth=1.2, label=f"USL ({USL})")
-    ax.axhline(LSL, color="#7c3aed", linestyle=":", linewidth=1.2, label=f"LSL ({LSL})")
-
-    out_of_control = df[
-        (df["diameter_mm"] > stats["ucl"]) | (df["diameter_mm"] < stats["lcl"])
-    ]
-    if not out_of_control.empty:
-        ax.scatter(
-            out_of_control["id"],
-            out_of_control["diameter_mm"],
-            color="red",
-            s=60,
-            zorder=5,
-            label="Out of control",
-        )
-
-    ax.set_xlabel("Sample #")
+    ax.set_xlabel("Measurement Index")
     ax.set_ylabel("Diameter (mm)")
-    ax.set_title(f"X-bar Control Chart — Cp={stats['cp']:.2f}, Cpk={stats['cpk']:.2f}")
-    ax.legend(loc="upper left", fontsize=8)
+    ax.set_title("SPC Control Chart")
+    ax.legend()
     ax.grid(True, alpha=0.3)
-
     fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    print(f"\nChart saved to: {output_path}")
+    return fig
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="SPC analysis on logged CNC measurements."
+def generate_spc_chart_base64():
+    """Generate the control chart and return as base64 PNG string."""
+    df = load_measurements()
+    if df.empty:
+        return None
+    fig = generate_control_chart_figure(df)
+    if fig is None:
+        return None
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=150)
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode("utf-8")
+    plt.close(fig)
+    return img_base64
+
+
+def main():
+    parser = argparse.ArgumentParser(description="SPC Analysis Tool")
+    parser.add_argument(
+        "--output", default="control_chart.png", help="Output file for control chart"
     )
-    parser.add_argument("--db", type=Path, default=DB_PATH)
-    parser.add_argument("--output", type=Path, default=OUTPUT_CHART)
-    parser.add_argument("--usl", type=float, default=USL)
-    parser.add_argument("--lsl", type=float, default=LSL)
     args = parser.parse_args()
 
-    df = load_measurements(args.db)
-    stats = calculate_capability(df, args.usl, args.lsl)
-    print_report(stats)
-    plot_control_chart(df, stats, args.output)
+    df = load_measurements()
+    if df.empty:
+        print("❌ No measurements found in database.")
+        return
+
+    stats = calculate_spc_stats(df)
+    if stats:
+        print("\n📊 SPC Report")
+        print("=" * 50)
+        print(f"Number of readings: {stats['n']}")
+        print(f"Mean diameter: {stats['mean']:.4f} mm")
+        print(f"Standard deviation: {stats['std']:.4f} mm")
+        print(f"Cp: {stats['cp']:.3f}" if stats["cp"] is not None else "Cp: —")
+        print(f"Cpk: {stats['cpk']:.3f}" if stats["cpk"] is not None else "Cpk: —")
+        print(f"Out-of-control count: {stats['ooc_count']} ({stats['ooc_pct']:.1f}%)")
+    else:
+        print("❌ Could not compute statistics.")
+
+    fig = generate_control_chart_figure(df)
+    if fig:
+        fig.savefig(args.output, dpi=150)
+        print(f"✅ Control chart saved as {args.output}")
+        plt.show()
+    else:
+        print("❌ Could not generate chart.")
 
 
 if __name__ == "__main__":

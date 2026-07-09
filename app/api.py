@@ -8,6 +8,30 @@ import random
 from config.settings import DB_PATH, SPEC_LOWER, SPEC_UPPER, TARGET
 from app.fmea_rpn import get_recent_measurements, calculate_rpn
 from data_ingestion.data_logger import log_measurement
+from app.spc_analysis import generate_spc_chart_base64
+
+from data_ingestion.seed_demo_data import seed_demo_data
+from config.settings import get_db_connection
+
+
+def ensure_data():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM measurements")
+        count = cur.fetchone()[0]
+        if count == 0:
+            print("🌱 Database empty – seeding demo data...")
+            seed_demo_data()
+    except Exception:
+        print("⚠️ Table not found – seeding...")
+        seed_demo_data()
+    finally:
+        conn.close()
+
+
+# Call it before starting the simulator
+ensure_data()
 
 app = FastAPI(title="CNC SPC Dashboard")
 
@@ -91,6 +115,29 @@ async def get_stats():
     cpl = (mean - SPEC_LOWER) / (3 * std_dev)
     cpk = min(cpu, cpl)
     return {"cp": round(cp, 3), "cpk": round(cpk, 3), "n": len(diameters)}
+
+
+@app.get("/api/spc_chart")
+async def get_spc_chart():
+    """Return the SPC control chart as a base64 image."""
+    img_base64 = generate_spc_chart_base64()
+    if img_base64 is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No measurements available or chart generation failed",
+        )
+    return {"image": img_base64}
+
+
+@app.get("/api/count")
+async def get_count():
+    """Return the total number of measurements in the database."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM measurements")
+    count = cur.fetchone()[0]
+    conn.close()
+    return {"count": count}
 
 
 @app.get("/api/fmea")

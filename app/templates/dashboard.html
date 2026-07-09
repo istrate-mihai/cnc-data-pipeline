@@ -3,143 +3,59 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Schaeffler CNC SPC Dashboard</title>
+    <title>CNC SPC Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f0f2f5;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1300px;
-            margin: 0 auto;
-        }
-        /* Header – Schaeffler green */
-        .header {
-            background: #006747;
-            color: #ffffff;
-            padding: 20px 30px;
-            border-radius: 8px 8px 0 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 {
-            font-weight: 300;
-            letter-spacing: 1px;
-            font-size: 28px;
-        }
-        .header .sub {
-            font-size: 14px;
-            opacity: 0.85;
-        }
-        .header .live-badge {
-            background: rgba(255,255,255,0.15);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-        }
-        /* Stats cards */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin: 20px 0;
-        }
-        .stat-card {
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 18px 20px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-            border-left: 5px solid #006747;
-        }
-        .stat-card .label {
-            font-size: 13px;
-            color: #6c757d;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .stat-card .value {
-            font-size: 28px;
-            font-weight: 600;
-            color: #006747;
-            margin-top: 6px;
-        }
-        .stat-card .detail {
-            font-size: 13px;
-            color: #495057;
-            margin-top: 4px;
-        }
-        .stat-card.fmea {
-            border-left-color: #e67e22;  /* orange accent for FMEA */
-        }
-        /* Chart */
-        .chart-wrapper {
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-            margin: 20px 0;
-        }
-        .chart-wrapper .chart-title {
-            font-size: 16px;
-            font-weight: 500;
-            color: #006747;
-            margin-bottom: 10px;
-        }
-        .chart-container {
-            height: 400px;
-        }
-        .fmea-detail {
-            background: #f8f9fa;
-            padding: 12px 20px;
-            border-radius: 8px;
-            border-left: 4px solid #e67e22;
-            margin: 10px 0 20px;
-            font-size: 14px;
-            color: #343a40;
-        }
-        .fmea-detail strong {
-            color: #006747;
-        }
-        .update-time {
-            color: #6c757d;
-            font-size: 13px;
-            text-align: right;
-            margin-top: 10px;
-        }
-        @media (max-width: 600px) {
-            .header { flex-direction: column; align-items: flex-start; gap: 8px; }
-            .stat-card .value { font-size: 22px; }
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 1300px; margin: 0 auto; }
+        .header { background: #006747; color: #fff; padding: 20px 30px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-weight: 300; letter-spacing: 1px; font-size: 28px; }
+        .header .sub { font-size: 14px; opacity: 0.85; }
+        .header .live-badge { background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px; font-size: 14px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin: 20px 0; }
+        .stat-card { background: #fff; border-radius: 8px; padding: 18px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); border-left: 5px solid #006747; }
+        .stat-card .label { font-size: 13px; color: #6c757d; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 28px; font-weight: 600; color: #006747; margin-top: 6px; }
+        .stat-card .detail { font-size: 13px; color: #495057; margin-top: 4px; }
+        .stat-card.fmea { border-left-color: #e67e22; }
+        .stat-card.count { border-left-color: #17a2b8; }
+        .chart-wrapper { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 20px 0; }
+        .chart-wrapper .chart-title { font-size: 16px; font-weight: 500; color: #006747; margin-bottom: 10px; }
+        .chart-container { height: 400px; }
+        .fmea-detail { background: #f8f9fa; padding: 12px 20px; border-radius: 8px; border-left: 4px solid #e67e22; margin: 10px 0 20px; font-size: 14px; color: #343a40; }
+        .fmea-detail strong { color: #006747; }
+        .update-time { color: #6c757d; font-size: 13px; text-align: right; margin-top: 10px; }
+        .spc-btn-group { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 20px 0; }
+        .spc-btn { background: #006747; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .spc-btn:hover { background: #004d35; }
+        .spc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .spc-btn.hide-btn { background: #6c757d; }
+        .spc-btn.hide-btn:hover { background: #5a6268; }
+        #spc-status { color: #6c757d; font-size: 14px; }
+        #spc-chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 20px 0; display: none; }
+        #spc-chart-container h3 { color: #006747; margin-bottom: 12px; }
+        #spc-chart-container img { width: 100%; height: auto; border-radius: 4px; }
+        @media (max-width: 600px) { .header { flex-direction: column; align-items: flex-start; gap: 8px; } .stat-card .value { font-size: 22px; } }
     </style>
 </head>
 <body>
 <div class="container">
-    <!-- Header -->
     <div class="header">
         <div>
-            <h1>🔧 Schaeffler CNC SPC</h1>
+            <h1>🔧 CNC SPC</h1>
             <div class="sub">Live process monitoring – diameter measurements</div>
         </div>
         <div class="live-badge">● Live</div>
     </div>
 
-    <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="label">Process Capability (Cp)</div>
+            <div class="label">Potential Capability (Cp)</div>
             <div class="value" id="cp">—</div>
         </div>
         <div class="stat-card">
-            <div class="label">Process Capability (Cpk)</div>
+            <div class="label">Actual Capability (Cpk)</div>
             <div class="value" id="cpk">—</div>
         </div>
         <div class="stat-card fmea">
@@ -152,9 +68,26 @@
             <div class="value" id="last-diameter">—</div>
             <div class="detail" id="last-status">—</div>
         </div>
+        <div class="stat-card count">
+            <div class="label">Measurements</div>
+            <div class="value" id="measurement-count">—</div>
+            <div class="detail">Total records</div>
+        </div>
     </div>
 
-    <!-- Chart -->
+    <!-- SPC Buttons -->
+    <div class="spc-btn-group">
+        <button id="spc-run-btn" class="spc-btn">📈 Run SPC Analysis</button>
+        <button id="spc-hide-btn" class="spc-btn hide-btn" style="display:none;">✖ Hide Chart</button>
+        <span id="spc-status"></span>
+    </div>
+
+    <!-- SPC Chart Container -->
+    <div id="spc-chart-container">
+        <h3>📊 SPC Control Chart</h3>
+        <img id="spc-chart-img" src="" alt="SPC Chart" />
+    </div>
+
     <div class="chart-wrapper">
         <div class="chart-title">📊 Diameter over time</div>
         <div class="chart-container">
@@ -163,8 +96,7 @@
         <div class="update-time">Last updated: <span id="last-update">—</span></div>
     </div>
 
-    <!-- FMEA details -->
-    <div class="fmea-detail" id="fmea-detail-box">
+    <div class="fmea-detail">
         <strong>FMEA breakdown</strong> – Severity: <span id="sev">—</span> ·
         Occurrence: <span id="occ">—</span> ·
         Detection: <span id="det">—</span>
@@ -174,7 +106,6 @@
 <script>
     const ctx = document.getElementById('chart').getContext('2d');
     let chart;
-
     const SPEC_LOWER = 9.8;
     const SPEC_UPPER = 10.2;
     const TARGET = 10.0;
@@ -227,16 +158,11 @@
                                 tooltip: { callbacks: { label: (ctx) => `Diameter: ${ctx.parsed.y.toFixed(4)} mm` } }
                             },
                             scales: {
-                                y: {
-                                    min: 9.5, max: 10.5,
-                                    grid: { color: '#e9ecef' },
-                                    title: { display: true, text: 'Diameter (mm)', color: '#006747' }
-                                },
+                                y: { min: 9.5, max: 10.5, grid: { color: '#e9ecef' }, title: { display: true, text: 'Diameter (mm)', color: '#006747' } },
                                 x: { grid: { display: false }, title: { display: true, text: 'Time', color: '#006747' } }
                             }
                         }
                     });
-                    // Add spec lines
                     const plugin = {
                         id: 'specLines',
                         afterDraw(chart) {
@@ -299,8 +225,65 @@
                 }
             })
             .catch(() => {});
+
+        fetch('/api/count')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('measurement-count').textContent = data.count;
+            })
+            .catch(() => {});
     }
 
+    // SPC Button Logic
+    const runBtn = document.getElementById('spc-run-btn');
+    const hideBtn = document.getElementById('spc-hide-btn');
+    const statusSpan = document.getElementById('spc-status');
+    const chartContainer = document.getElementById('spc-chart-container');
+    const chartImg = document.getElementById('spc-chart-img');
+
+    function showChart() {
+        chartContainer.style.display = 'block';
+        hideBtn.style.display = 'inline-block';
+        runBtn.textContent = '🔄 Refresh SPC';
+    }
+
+    function hideChart() {
+        chartContainer.style.display = 'none';
+        hideBtn.style.display = 'none';
+        runBtn.textContent = '📈 Run SPC Analysis';
+        statusSpan.textContent = '';
+    }
+
+    runBtn.addEventListener('click', function() {
+        runBtn.disabled = true;
+        statusSpan.textContent = 'Generating chart...';
+
+        fetch('/api/spc_chart')
+            .then(res => {
+                if (!res.ok) throw new Error('No data or server error');
+                return res.json();
+            })
+            .then(data => {
+                chartImg.src = 'data:image/png;base64,' + data.image;
+                showChart();
+                statusSpan.textContent = '✅ Chart generated!';
+                runBtn.disabled = false;
+            })
+            .catch(err => {
+                statusSpan.textContent = '❌ Error: ' + err.message;
+                runBtn.disabled = false;
+                runBtn.textContent = '📈 Run SPC Analysis';
+            });
+    });
+
+    hideBtn.addEventListener('click', function() {
+        hideChart();
+    });
+
+    // Initial state
+    hideChart();
+
+    // Polling
     fetchData();
     fetchStats();
     setInterval(() => { fetchData(); fetchStats(); }, 2000);

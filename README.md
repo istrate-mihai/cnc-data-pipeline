@@ -17,6 +17,12 @@ A complete data pipeline that simulates a CNC machine producing diameter measure
 
 ---
 
+## Screenshots
+
+![CNC Dashboard](images/spc_dashboard.png)
+
+*Live dashboard showing diameter trends, Cp/Cpk, FMEA RPN, and one‑click SPC control chart.*
+
 ## Setup
 
 1. **Clone the repository** and navigate into the project root.

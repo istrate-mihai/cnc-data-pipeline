@@ -5,80 +5,130 @@ Simulates the full data flow a real CNC/Modbus-connected machine would produce, 
 ![Live SPC Dashboard](./images/spc_dashboard.png)
 
 ```
-modbus_server.py   --Modbus TCP-->  data_logger.py  --writes-->  SQLite  <--reads--  api.py (FastAPI dashboard)
-opcua_server.py     --OPC UA-->     (alt. client, same DB)                <--reads--  spc_analysis.py (CLI report + PNG chart)
+modbus_server.py --Modbus TCP--> data_logger.py --writes--> SQLite <--reads-- api.py (FastAPI dashboard)
+opcua_server.py  --OPC UA----> (alt. client, same DB) <--reads-- spc_analysis.py (CLI report + PNG chart)
 ```
 
-## Why this architecture
+---
 
-- **Two protocols (Modbus + OPC UA)** simulated in parallel, on purpose: the JD explicitly lists both as "avantaj". Same underlying signal, different wire format — demonstrates the actual integration tradeoff at interview.
-- **SQLite** instead of Postgres/MySQL: zero external dependencies, portable. In production this slot is exactly where a MES database would sit.
-- **Cp/Cpk formulas implemented from scratch** (not a library call) — every number in the report is explainable line by line.
-- **FastAPI dashboard** with a background simulator: makes the deployed instance genuinely live (new data every 2s) without needing a separate always-on Modbus process on a free hosting tier.
+## Project Structure
+
+```text
+cnc-data-pipeline/
+├── app/                       # Dashboard & SPC logic
+│   ├── api.py                 # FastAPI endpoints
+│   ├── spc_analysis.py        # Cp/Cpk + control chart generator
+│   └── templates/
+│       └── dashboard.html     # Live UI
+├── data_ingestion/            # Simulated sources + logger
+│   ├── modbus_server.py       # Modbus TCP simulator
+│   ├── opcua_server.py        # OPC UA simulator
+│   ├── data_logger.py         # Modbus -> SQLite gateway
+│   └── seed_demo_data.py      # Initial data populator
+├── config/
+│   └── settings.py            # Centralized constants (limits, paths, etc.)
+├── db/                        # SQLite database (auto-created)
+├── requirements.txt
+├── Dockerfile
+└── render.yaml
+```
+
+---
+
+## Why This Architecture
+
+* **Two protocols (Modbus + OPC UA)** simulated in parallel, on purpose: the JD explicitly lists both as "avantaj". Same underlying signal, different wire format — demonstrates the actual integration tradeoff at interview.
+* **SQLite** instead of Postgres/MySQL: zero external dependencies, portable. In production this slot is exactly where a MES database would sit.
+* **Cp/Cpk formulas implemented from scratch** (not a library call) — every number in the report is explainable line by line.
+* **FastAPI dashboard** with a background simulator: makes the deployed instance genuinely live (new data every 2s) without needing a separate always-on Modbus process on a free hosting tier.
+* **Modular structure**: `app/`, `data_ingestion/`, `config/` separate concerns, easy to extend with new protocols (MQTT, etc.).
+
+---
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt --break-system-packages   # Linux/Git Bash
+# Clone the repo and enter the directory
+cd cnc_data_pipeline
+
+# Create and activate a virtual environment (recommended)
+python -m venv venv
+source venv/Scripts/activate     # Git Bash / Linux
+# or: venv\Scripts\activate      # Windows CMD
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-⚠ Pinned to `pymodbus==3.6.9` deliberately. pymodbus 3.13+ deprecated the `context[slave].setValues(...)` API in favor of a SimData/SimDevice rewrite — 3.6.9 matches ~all tutorials/docs and is stable for this scope.
+> ⚠️ **Note:** Pinned to `pymodbus==3.6.9` deliberately. `pymodbus 3.13+` deprecated the `context[slave].setValues(...)` API in favor of a `SimData/SimDevice` rewrite — 3.6.9 matches almost all tutorials/docs and is stable for this scope.
 
-## Run locally — full pipeline (3 terminals)
+---
 
+## Running Locally
+
+### Full Pipeline (Requires 3 terminals)
+All commands must be run from the project root (`cnc_data_pipeline/`) with the virtual environment activated.
+
+| Terminal | Command | Description |
+| :--- | :--- | :--- |
+| **1** | `python data_ingestion/modbus_server.py` | Simulated CNC machine (Modbus TCP) |
+| **2** | `python data_ingestion/data_logger.py` | Reads Modbus, writes to SQLite |
+| **3** | `uvicorn app.api:app --reload --port 8000` | Live dashboard (http://localhost:8000) |
+
+* Terminals 1 & 2 run forever – press `Ctrl+C` to stop.
+* Terminal 3 can be stopped with `Ctrl+C` as well.
+* *Optional:* Use `--max-reads 30` with `data_logger.py` to stop after N readings.
+
+### OPC UA Variant
 ```bash
-# Terminal 1 — simulated machine (Modbus)
-python3 modbus_server.py
-
-# Terminal 2 — logging its output
-python3 data_logger.py --max-reads 30    # or omit --max-reads to run forever
-
-# Terminal 3 — CLI analysis (console report + control_chart.png)
-python3 spc_analysis.py
+python data_ingestion/opcua_server.py
 ```
+Exposes the same simulated signal as a typed OPC UA object (`CNC_Machine_1.Diameter_mm`, `CNC_Machine_1.OutOfControlFlag`) at `opc.tcp://127.0.0.1:4840/cnc/server/`, instead of raw Modbus registers. 
 
-## Run locally — OPC UA variant
+Browse it with any OPC UA client (e.g., UAExpert) or asyncua's own `Client` class to see the difference in practice: named/typed nodes vs. flat register addresses.
 
+### Seed Initial Data (Optional)
+If you want to populate the database with 40 simulated measurements before starting the logger:
 ```bash
-python3 opcua_server.py
+python data_ingestion/seed_demo_data.py
 ```
+*Note: This is also automatically executed during the Docker build (used on Render).*
 
-Exposes the same simulated signal as a typed OPC UA object (`CNC_Machine_1.Diameter_mm`, `CNC_Machine_1.OutOfControlFlag`) at `opc.tcp://127.0.0.1:4840/cnc/server/`, instead of raw Modbus registers. Browse it with any OPC UA client (e.g. UAExpert) or `asyncua`'s own `Client` class to see the difference in practice: named/typed nodes vs. flat register addresses.
-
-## Run locally — live dashboard
-
+### Offline SPC Analysis
+After collecting enough data (e.g., 100+ readings), generate a console report and a control chart PNG:
 ```bash
-uvicorn api:app --reload --port 8000
+python app/spc_analysis.py
 ```
+The chart is saved as `images/control_chart.png`.
 
-Open `http://localhost:8000` — live chart + Cp/Cpk cards, refreshing every 2s. Reads from `cnc_measurements.db`; if you're also running `modbus_server.py` + `data_logger.py`, the dashboard shows real pipeline data. If not, its own background task keeps generating simulated readings so the page isn't static.
+---
 
-## Deploy to Render (public URL)
+## Protocol & Data Mapping
 
-1. Push this folder to a GitHub repo.
-2. On Render: **New → Blueprint**, point at the repo — `render.yaml` auto-configures the service (Docker, free plan).
-3. Alternatively, **New → Web Service**, select "Docker" as the environment, point at this repo — Render will use the included `Dockerfile`.
-4. First deploy runs `seed_demo_data.py` (via `Dockerfile`) so the dashboard has data immediately; the background simulator in `api.py` keeps it moving after that.
-5. Render gives you a public URL (`https://<service-name>.onrender.com`) — that's what you send/show at the interview.
-
-⚠ Free tier note: Render's free web services spin down after inactivity and take a few seconds to wake on the next request — mention this if asked, it's normal and expected for a free-tier demo, not a bug.
-
-## Register map (modbus_server.py)
-
+### Register Map (`modbus_server.py`)
 | Address | Meaning | Encoding |
-|---|---|---|
-| 0 | Part diameter | micrometers, int (10006 = 10.006mm) |
-| 1 | Out-of-control flag | 0 = normal, 1 = beyond 3σ from drift |
+| :--- | :--- | :--- |
+| **0** | Part diameter | micrometers, int (10006 = 10.006mm) |
+| **1** | Out-of-control flag | 0 = normal, 1 = beyond 3σ from drift |
 
-## OPC UA node map (opcua_server.py)
-
+### OPC UA Node Map (`opcua_server.py`)
 | Node | Type | Meaning |
-|---|---|---|
+| :--- | :--- | :--- |
 | `CNC_Machine_1.Diameter_mm` | Double | Part diameter, mm (no scaling needed — floats are native) |
 | `CNC_Machine_1.OutOfControlFlag` | Int16 | 0 = normal, 1 = beyond 3σ from drift |
 
-## Simulated process behavior
+---
 
-- Target: 10.006mm (matches the hand-calculated example from theory prep)
-- Noise: Gaussian, σ ≈ 0.021mm
-- Slow linear drift simulates tool wear — Cp stays roughly stable, **Cpk degrades over time** as the mean walks away from center. Concrete example of "Cp good, Cpk bad" to reference at interview.
+## Simulated Process Behavior
+
+* **Target:** 10.006mm (matches the hand-calculated example from theory prep)
+* **Noise:** Gaussian, σ ≈ 0.021mm
+* **Drift:** Slow linear drift simulates tool wear — Cp stays roughly stable, Cpk degrades over time as the mean walks away from center. This serves as a concrete example of *"Cp good, Cpk bad"* to reference during the interview.
+
+---
+
+## Troubleshooting
+
+* **`ModuleNotFoundError: No module named 'config'`** when running scripts from `data_ingestion/` or `app/`: This is fixed. All scripts now add the project root to `sys.path` automatically.
+* **`No module named 'pymodbus'`**: Ensure your virtual environment is activated and dependencies are installed (`pip install -r requirements.txt`).
+* **Port conflicts**: Change the port in `app.api` or in the `modbus_server.py`/`data_logger.py` settings (adjust `config/settings.py`).

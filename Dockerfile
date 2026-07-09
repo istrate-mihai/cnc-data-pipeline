@@ -2,17 +2,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Copiem requirements și instalăm dependințele
 COPY requirements.txt .
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" pandas matplotlib
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY spc_analysis.py api.py seed_demo_data.py ./
+# Copiem întregul cod (structura nouă)
+COPY app/ ./app/
+COPY data_ingestion/ ./data_ingestion/
+COPY config/ ./config/
+# Directorul db/ va fi creat la runtime
 
-# Render free tier has no persistent process for a separate Modbus
-# simulator, so we seed a demo dataset at build/start time. This is a
-# deliberate simplification for the "public URL to click and see it work"
-# use case -- data_logger.py + modbus_server.py remain the real pipeline
-# to run locally/on your own machine when demonstrating live ingestion.
-RUN python3 seed_demo_data.py
+# Seed-ul se execută la build (pentru a avea date inițiale)
+RUN python data_ingestion/seed_demo_data.py
 
 EXPOSE 8000
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Rulează serverul FastAPI
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]

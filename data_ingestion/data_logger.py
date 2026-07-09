@@ -1,36 +1,34 @@
 """
-data_logger.py
+data_ingestion/data_logger.py
 
 Modbus TCP client that polls modbus_server.py at a fixed interval,
 reads the simulated diameter measurement + out-of-control flag, and
 persists every reading to SQLite with a timestamp.
-
-This is the "gateway" layer in the real-world data flow:
-    Sensor/CMM/Calibru -> Protocol (Modbus/OPC UA) -> Gateway/Script -> DB -> Dashboard
-
-Requires: pymodbus>=3.13
-Run modbus_server.py in a separate terminal first.
 """
 
 import argparse
 import asyncio
 import logging
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Add project root to sys.path so that 'config' can be imported
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from pymodbus.client import AsyncModbusTcpClient
+
+from config.settings import DB_PATH, MODBUS_HOST, MODBUS_PORT, POLL_INTERVAL_S
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("data_logger")
 
-HOST = "127.0.0.1"
-PORT = 5020
-DB_PATH = Path(__file__).parent / "cnc_measurements.db"
-POLL_INTERVAL_S = 1.0
-
 
 def init_db(db_path: Path) -> sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.execute(
         """
@@ -84,14 +82,14 @@ async def main(max_reads: int | None) -> None:
     conn = init_db(DB_PATH)
     log.info("SQLite DB ready at %s", DB_PATH)
 
-    client = AsyncModbusTcpClient(HOST, port=PORT)
+    client = AsyncModbusTcpClient(MODBUS_HOST, port=MODBUS_PORT)
     await client.connect()
 
     if not client.connected:
         log.error(
             "Could not connect to Modbus server at %s:%d. Is modbus_server.py running?",
-            HOST,
-            PORT,
+            MODBUS_HOST,
+            MODBUS_PORT,
         )
         return
 

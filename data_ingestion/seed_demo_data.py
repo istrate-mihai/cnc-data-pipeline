@@ -1,30 +1,34 @@
 """
-seed_demo_data.py
+data_ingestion/seed_demo_data.py
 
 Generates an initial batch of simulated measurements directly into
-cnc_measurements.db, using the same process model as modbus_server.py
-(target 10.006mm, Gaussian noise, linear drift). Used at container
-build time so the deployed dashboard has data to show immediately,
-without needing a live Modbus/OPC UA source on the hosting platform.
-
-Run manually if you want to reset/reseed the demo DB:
-    python3 seed_demo_data.py
+cnc_measurements.db, using the same process model as modbus_server.py.
 """
 
 import random
 import sqlite3
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "cnc_measurements.db"
+# Add project root to sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-TARGET_MM = 10.006
-NOISE_STD_MM = 0.021
-DRIFT_PER_TICK_MM = 0.0004
-SEED_COUNT = 40
+from config.settings import (
+    DB_PATH,
+    TARGET_MM,
+    NOISE_STD_MM,
+    DRIFT_PER_TICK_MM,
+    SEED_COUNT,
+)
 
 
 def main() -> None:
+    # Ensure database directory exists
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         """

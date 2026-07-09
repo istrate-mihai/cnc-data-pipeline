@@ -1,32 +1,25 @@
 """
-spc_analysis.py
+app/spc_analysis.py
 
-Reads logged measurements from SQLite (written by data_logger.py),
-calculates process capability (Cp, Cpk) per the formulas derived in
-the theory session:
-
-    Cp  = (USL - LSL) / 6s
-    Cpk = min[(USL - x_bar) / 3s, (x_bar - LSL) / 3s]
-
-...and renders an X-bar control chart with UCL/LCL at x_bar +/- 3s,
-matching the 68-95-99.7 empirical rule.
-
-Requires: pandas, matplotlib
+Calculates Cp, Cpk and generates control chart.
 """
 
 import argparse
 import sqlite3
+import sys
 from pathlib import Path
+
+# Add project root to sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DB_PATH = Path(__file__).parent / "cnc_measurements.db"
-OUTPUT_CHART = Path(__file__).parent / "control_chart.png"
+from config.settings import DB_PATH, USL, LSL
 
-# Specification limits, mm -- matches the worked example from theory session
-USL = 10.10
-LSL = 9.90
+OUTPUT_CHART = Path(__file__).parent.parent / "images" / "control_chart.png"
 
 
 def load_measurements(db_path: Path) -> pd.DataFrame:
@@ -46,7 +39,7 @@ def load_measurements(db_path: Path) -> pd.DataFrame:
 
 def calculate_capability(df: pd.DataFrame, usl: float, lsl: float) -> dict:
     x_bar = df["diameter_mm"].mean()
-    s = df["diameter_mm"].std(ddof=1)  # ddof=1 -> divide by n-1, sample std
+    s = df["diameter_mm"].std(ddof=1)
 
     cp = (usl - lsl) / (6 * s)
     cpk_upper = (usl - x_bar) / (3 * s)
@@ -119,7 +112,6 @@ def plot_control_chart(df: pd.DataFrame, stats: dict, output_path: Path) -> None
     ax.axhline(USL, color="#7c3aed", linestyle=":", linewidth=1.2, label=f"USL ({USL})")
     ax.axhline(LSL, color="#7c3aed", linestyle=":", linewidth=1.2, label=f"LSL ({LSL})")
 
-    # highlight points outside control limits (special-cause candidates)
     out_of_control = df[
         (df["diameter_mm"] > stats["ucl"]) | (df["diameter_mm"] < stats["lcl"])
     ]

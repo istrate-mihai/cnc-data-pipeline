@@ -20,15 +20,36 @@ from io import BytesIO
 from datetime import datetime
 from config.settings import DB_PATH, SPEC_UPPER, SPEC_LOWER, TARGET, get_db_connection
 
+# Number of most-recent readings shown on the SPC/distribution charts.
+# Keeps charts legible at scale (thousands of rows) and reflects current
+# process state rather than the entire lifetime history.
+CHART_WINDOW = 300
 
-def load_measurements():
-    """Load all measurements using the configured database connection."""
+
+def load_measurements(limit=None):
+    """Load measurements using the configured database connection.
+
+    limit=None loads the full history (used by the CLI report). Chart
+    generators pass a limit so that at scale (thousands of rows) the plot
+    stays legible and reflects current process state, consistent with
+    /api/stats which already windows to the last 200 readings.
+    """
     conn = get_db_connection()
     try:
-        df = pd.read_sql_query(
-            "SELECT id, timestamp, diameter, out_of_control FROM measurements ORDER BY id",
-            conn,
-        )
+        if limit:
+            # Pull the most recent N rows, then re-sort ascending so the
+            # chart still reads left-to-right in chronological order.
+            df = pd.read_sql_query(
+                f"SELECT id, timestamp, diameter, out_of_control FROM measurements "
+                f"ORDER BY id DESC LIMIT {int(limit)}",
+                conn,
+            )
+            df = df.sort_values("id").reset_index(drop=True)
+        else:
+            df = pd.read_sql_query(
+                "SELECT id, timestamp, diameter, out_of_control FROM measurements ORDER BY id",
+                conn,
+            )
     except Exception as e:
         print(f"Error loading data: {e}")
         df = pd.DataFrame()
@@ -84,15 +105,72 @@ def generate_control_chart_figure(df):
     ax.set_xlabel("Measurement Index")
     ax.set_ylabel("Diameter (mm)")
     ax.set_title("SPC Control Chart")
-    ax.legend()
+    ax.legend(loc="upper left")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     return fig
 
 
+def generate_distribution_figure(df):
+    """Create a histogram of diameters overlaid with the fitted normal curve
+    and spec/target reference lines — shows process centering and spread
+    relative to tolerance, complementary to the time-ordered control chart."""
+    if df.empty:
+        return None
+    diameters = df["diameter"]
+    mean = diameters.mean()
+    std = diameters.std(ddof=1)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    n_bins = max(10, min(40, len(diameters) // 5))
+    ax.hist(
+        diameters,
+        bins=n_bins,
+        density=True,
+        color="#1f77b4",
+        alpha=0.6,
+        edgecolor="white",
+        label="Diameter distribution",
+    )
+
+    if std > 0:
+        x = np.linspace(diameters.min(), diameters.max(), 200)
+        pdf = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mean) / std) ** 2)
+        ax.plot(x, pdf, "b-", linewidth=2, label=f"Normal fit (μ={mean:.3f}, σ={std:.3f})")
+
+    ax.axvline(x=mean, color="g", linestyle="--", label=f"Mean = {mean:.3f}")
+    ax.axvline(x=SPEC_UPPER, color="orange", linestyle=":", label=f"USL = {SPEC_UPPER}")
+    ax.axvline(x=SPEC_LOWER, color="orange", linestyle=":", label=f"LSL = {SPEC_LOWER}")
+    ax.axvline(x=TARGET, color="gray", linestyle="-.", label=f"Target = {TARGET}")
+
+    ax.set_xlabel("Diameter (mm)")
+    ax.set_ylabel("Density")
+    ax.set_title("Diameter Distribution vs. Specification")
+    ax.legend(loc="upper left")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig
+
+
+def generate_distribution_chart_base64():
+    """Generate the distribution/histogram chart and return as base64 PNG string."""
+    df = load_measurements(limit=CHART_WINDOW)
+    if df.empty:
+        return None
+    fig = generate_distribution_figure(df)
+    if fig is None:
+        return None
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=150)
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode("utf-8")
+    plt.close(fig)
+    return img_base64
+
+
 def generate_spc_chart_base64():
     """Generate the control chart and return as base64 PNG string."""
-    df = load_measurements()
+    df = load_measurements(limit=CHART_WINDOW)
     if df.empty:
         return None
     fig = generate_control_chart_figure(df)
@@ -111,9 +189,18 @@ def main():
     parser.add_argument(
         "--output", default="control_chart.png", help="Output file for control chart"
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "Only use the most recent N readings (matches the dashboard's "
+            f"chart window, default {CHART_WINDOW}). Omit for full history."
+        ),
+    )
     args = parser.parse_args()
 
-    df = load_measurements()
+    df = load_measurements(limit=args.limit)
     if df.empty:
         print("❌ No measurements found in database.")
         return

@@ -8,7 +8,7 @@ import random
 from config.settings import DB_PATH, SPEC_LOWER, SPEC_UPPER, TARGET
 from app.fmea_rpn import get_recent_measurements, calculate_rpn
 from data_ingestion.data_logger import log_measurement
-from app.spc_analysis import generate_spc_chart_base64
+from app.spc_analysis import generate_spc_chart_base64, generate_distribution_chart_base64
 
 from data_ingestion.seed_demo_data import seed_demo_data
 from config.settings import get_db_connection
@@ -121,6 +121,18 @@ async def get_stats():
 async def get_spc_chart():
     """Return the SPC control chart as a base64 image."""
     img_base64 = generate_spc_chart_base64()
+    if img_base64 is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No measurements available or chart generation failed",
+        )
+    return {"image": img_base64}
+
+
+@app.get("/api/distribution_chart")
+async def get_distribution_chart():
+    """Return the diameter histogram + normal-fit chart as a base64 image."""
+    img_base64 = generate_distribution_chart_base64()
     if img_base64 is None:
         raise HTTPException(
             status_code=404,

@@ -38,9 +38,13 @@ log = logging.getLogger("opcua_server")
 async def simulate_process(diameter_var, flag_var) -> None:
     drift = 0.0
     tick = 0
+    DRIFT_RESET_THRESHOLD_MM = 2 * NOISE_STD_MM + abs(DRIFT_PER_TICK_MM) * 50
     while True:
         tick += 1
         drift += DRIFT_PER_TICK_MM
+        if abs(drift) > DRIFT_RESET_THRESHOLD_MM:
+            log.info("tick=%d drift=%.4fmm exceeded threshold — simulating tool change, resetting drift", tick, drift)
+            drift = 0.0
         noise = random.gauss(0, NOISE_STD_MM)
         value_mm = round(TARGET_MM + drift + noise, 4)
 

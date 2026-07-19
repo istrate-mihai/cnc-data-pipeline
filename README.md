@@ -6,10 +6,11 @@ A complete data pipeline that simulates a CNC machine producing diameter measure
 
 ## Features
 
-* **Simulated Modbus server** (port 5020) generating diameter + out‑of‑control flag every second.
+* **Simulated Modbus server** (port 5020) generating diameter + out‑of‑control flag every second, with drift capped and reset (simulated tool change) so long-running sessions stay within a realistic range.
 * **OPC UA server** (port 4840) exposing the same data as typed nodes.
 * **Data logger** polls Modbus and writes to the database.
 * **FastAPI dashboard** with live chart, `/api/measurements`, `/api/stats` (Cp/Cpk), and `/api/fmea` (RPN).
+* **SPC control chart** (`/api/spc_chart`) and **diameter distribution chart** (`/api/distribution_chart`, histogram + normal fit) — both windowed to the most recent readings (`CHART_WINDOW`, default 300) so they stay readable at scale.
 * **Background simulator** keeps data flowing even when Modbus is off.
 * **FMEA RPN calculator** – CLI script and API endpoint.
 * **PostgreSQL support** via `DATABASE_URL` environment variable.
@@ -79,6 +80,12 @@ Always ensure you run these commands from the project root directory.
 
 To populate the database with demonstration data before running the logger:
 ```bash
+python -m data_ingestion.seed_demo_data
+```
+
+To start fresh (e.g. before a live demo, if local test runs have accumulated a lot of data):
+```bash
+rm db/measurements.db
 python -m data_ingestion.seed_demo_data
 ```
 
@@ -155,4 +162,16 @@ Run the standalone Statistical Process Control report generator to run off-line 
 ```bash
 python -m app.spc_analysis
 ```
-This utility outputs a detailed calculation log to the console and generates a statistical chart saved locally as `control_chart.png`.
+This utility outputs a detailed calculation log to the console and generates a statistical chart saved locally as `control_chart.png`. By default it uses the full measurement history.
+
+To match the dashboard's windowed view (last 300 readings) instead of the full history:
+```bash
+python -m app.spc_analysis --limit 300
+```
+
+Or any other window size:
+```bash
+python -m app.spc_analysis --limit 100 --output recent_chart.png
+```
+
+The dashboard also exposes a second chart — a histogram of diameters with a fitted normal curve (`/api/distribution_chart`) — showing process centering and spread relative to spec, complementary to the time-ordered control chart.

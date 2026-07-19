@@ -43,9 +43,18 @@ async def simulate_process(context: ModbusServerContext) -> None:
     slave_ctx: ModbusSlaveContext = context[0x00]
     drift = 0.0
     tick = 0
+    # Cap on accumulated drift before we simulate a tool change / recalibration
+    # that resets it to zero. Without this, drift grows forever and the
+    # diameter eventually walks straight out of spec with no recovery —
+    # unrealistic for a real process and it also wrecks chart readability
+    # over long-running local test sessions.
+    DRIFT_RESET_THRESHOLD_UM = 2 * NOISE_STD_UM + abs(DRIFT_PER_TICK_UM) * 50
     while True:
         tick += 1
         drift += DRIFT_PER_TICK_UM
+        if abs(drift) > DRIFT_RESET_THRESHOLD_UM:
+            log.info("tick=%d drift=%.3fum exceeded threshold — simulating tool change, resetting drift", tick, drift)
+            drift = 0.0
         noise = random.gauss(0, NOISE_STD_UM)
         value_um = round(TARGET_UM + drift + noise)
         value_um = max(0, min(65535, value_um))

@@ -1,9 +1,10 @@
 fastapi
 uvicorn
 jinja2
-pymodbus
+pymodbus==3.6.9
 asyncua
 psycopg2-binary
 requests
 matplotlib
 pandas
+numpy

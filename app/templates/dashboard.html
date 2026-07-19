@@ -36,6 +36,9 @@
         #spc-chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 20px 0; display: none; }
         #spc-chart-container h3 { color: #006747; margin-bottom: 12px; }
         #spc-chart-container img { width: 100%; height: auto; border-radius: 4px; }
+        #dist-chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin: 20px 0; display: none; }
+        #dist-chart-container h3 { color: #006747; margin-bottom: 12px; }
+        #dist-chart-container img { width: 100%; height: auto; border-radius: 4px; }
         @media (max-width: 600px) { .header { flex-direction: column; align-items: flex-start; gap: 8px; } .stat-card .value { font-size: 22px; } }
     </style>
 </head>
@@ -86,6 +89,19 @@
     <div id="spc-chart-container">
         <h3>📊 SPC Control Chart</h3>
         <img id="spc-chart-img" src="" alt="SPC Chart" />
+    </div>
+
+    <!-- Distribution Buttons -->
+    <div class="spc-btn-group">
+        <button id="dist-run-btn" class="spc-btn">🔔 Run Distribution Analysis</button>
+        <button id="dist-hide-btn" class="spc-btn hide-btn" style="display:none;">✖ Hide Chart</button>
+        <span id="dist-status"></span>
+    </div>
+
+    <!-- Distribution Chart Container -->
+    <div id="dist-chart-container">
+        <h3>🔔 Diameter Distribution (Normal Fit)</h3>
+        <img id="dist-chart-img" src="" alt="Distribution Chart" />
     </div>
 
     <div class="chart-wrapper">
@@ -278,6 +294,52 @@
 
     hideBtn.addEventListener('click', function() {
         hideChart();
+    });
+
+    // Distribution Button Logic
+    const distRunBtn = document.getElementById('dist-run-btn');
+    const distHideBtn = document.getElementById('dist-hide-btn');
+    const distStatusSpan = document.getElementById('dist-status');
+    const distChartContainer = document.getElementById('dist-chart-container');
+    const distChartImg = document.getElementById('dist-chart-img');
+
+    function showDistChart() {
+        distChartContainer.style.display = 'block';
+        distHideBtn.style.display = 'inline-block';
+        distRunBtn.textContent = '🔄 Refresh Distribution';
+    }
+
+    function hideDistChart() {
+        distChartContainer.style.display = 'none';
+        distHideBtn.style.display = 'none';
+        distRunBtn.textContent = '🔔 Run Distribution Analysis';
+        distStatusSpan.textContent = '';
+    }
+
+    distRunBtn.addEventListener('click', function() {
+        distRunBtn.disabled = true;
+        distStatusSpan.textContent = 'Generating chart...';
+
+        fetch('/api/distribution_chart')
+            .then(res => {
+                if (!res.ok) throw new Error('No data or server error');
+                return res.json();
+            })
+            .then(data => {
+                distChartImg.src = 'data:image/png;base64,' + data.image;
+                showDistChart();
+                distStatusSpan.textContent = '✅ Chart generated!';
+                distRunBtn.disabled = false;
+            })
+            .catch(err => {
+                distStatusSpan.textContent = '❌ Error: ' + err.message;
+                distRunBtn.disabled = false;
+                distRunBtn.textContent = '🔔 Run Distribution Analysis';
+            });
+    });
+
+    distHideBtn.addEventListener('click', function() {
+        hideDistChart();
     });
 
     // Initial state

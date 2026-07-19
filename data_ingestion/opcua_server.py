@@ -8,8 +8,18 @@ exposed through OPC UA's object/node model.
 import asyncio
 import logging
 import random
+import sys
+from pathlib import Path
 
 from asyncua import Server, ua
+
+# Add project root to sys.path so 'config' is importable when this file is
+# run directly (python data_ingestion/opcua_server.py only puts
+# data_ingestion/ on sys.path by default, not the project root). Must run
+# before the config.settings import below.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import (
     OPCUA_ENDPOINT,
@@ -19,14 +29,6 @@ from config.settings import (
     DRIFT_PER_TICK_MM,
     UPDATE_INTERVAL_S,
 )
-
-import sys
-from pathlib import Path
-
-# Add project root to sys.path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 logging.basicConfig(
     level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s"
